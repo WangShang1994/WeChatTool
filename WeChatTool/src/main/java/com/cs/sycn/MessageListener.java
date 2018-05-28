@@ -61,13 +61,15 @@ public class MessageListener extends Thread {
 			String url = buildURL();
 			String paras = buildParas();
 			entry = httpClient.doPost(url, paras);
-			msgReqponse = EntityUtils.toString(entry);
+			msgReqponse = EntityUtils.toString(entry, "UTF-8");
 			updateSycnKey(msgReqponse);
 			List<WeChatMessage> newMsgList = procssMsgResponse(msgReqponse);
 			for (WeChatMessage msg : newMsgList) {
-				MessageSender ms = new MessageSender(msg);
-				ChatRobot cr = new ChatRobot();
-				ms.send(cr.talk(msg.getContent()));
+				if (!msg.getContent().isEmpty() && msg.getMsgType() == 1) {
+					MessageSender ms = new MessageSender(msg);
+					ChatRobot cr = new ChatRobot();
+					ms.send(cr.talk(msg.getContent()));
+				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -179,8 +181,6 @@ public class MessageListener extends Thread {
 				getNewMessage();
 			}
 		}
-
-		System.out.println(strResp);
 	}
 
 	// ?sid=xxx&skey=xxx&pass_ticket=xxx
@@ -225,10 +225,6 @@ public class MessageListener extends Thread {
 			sb.append(r.nextInt(9));
 		}
 		return sb.toString();
-	}
-
-	public static void main(String[] args) {
-		System.out.println(new Date().getTime() / 1000);
 	}
 
 }

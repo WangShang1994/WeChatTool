@@ -1,6 +1,5 @@
 package com.cs.message;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -54,7 +53,8 @@ public class MessageSender {
 		msg.put("ToUserName", respMessage.getFromUserName());
 		msg.put("LocalID", generateLocalIDAndClientMsgId());
 		msg.put("ClientMsgId", msg.get("LocalID"));
-		baseMap.put("Msg: ", msg);
+		baseMap.put("Msg", msg);
+		baseMap.put("Scene", "0");
 		return JSON.toJSONString(baseMap);
 	}
 
@@ -72,7 +72,7 @@ public class MessageSender {
 		String head = time.substring(0, 9);
 		String tail = time.substring(9, time.length());
 		StringBuilder sb = new StringBuilder(head);
-		for (int i = 0; i <= 2; i++) {
+		for (int i = 0; i <= 3; i++) {
 			Random r = new Random();
 			sb.append(r.nextInt(9));
 		}
