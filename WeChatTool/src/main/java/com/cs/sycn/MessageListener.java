@@ -10,11 +10,16 @@ import java.util.Random;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.cs.constant.URL;
 import com.cs.login.LoginController;
 import com.cs.login.LoginInfo;
+import com.cs.message.WeChatMessage;
+import com.cs.wechat.httpclient.MyHttpClient;
 import com.cs.wechat.httpclient.WeChatHttpClinet;
 
 public class MessageListener extends Thread {
@@ -23,7 +28,7 @@ public class MessageListener extends Thread {
 	String sKey = null;
 	String passTicket = null;
 	String uid = null;
-	Map<Integer, String> sycnKeymap = null;
+	Map<Integer, Object> sycnKeymap = null;
 	String deviceid = null;
 
 	public MessageListener() {
@@ -39,30 +44,60 @@ public class MessageListener extends Thread {
 	public void run() {
 		while (true) {
 			try {
-				startListener();
-			} catch (InterruptedException e) {
+				sycnCheckMsg();
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
 	}
 
-	// private void startListener() {
-	// WeChatHttpClinet httpClient = new WeChatHttpClinet();
-	// HttpEntity entry = null;
-	// String msgReqponse = null;
-	// try {
-	// String url = buildURL();
-	// String paras = buildParas();
-	// System.out.println("SYCNURL:" + url);
-	// System.out.println("SYCNParas:" + paras);
-	// entry = httpClient.doPost(url, paras);
-	// msgReqponse = WeChatHttpClinet.convertHttpEntry(entry);
-	// procssMsgResponse(msgReqponse);
-	// } catch (Exception e) {
-	// e.printStackTrace();
-	// }
-	//
-	// }
+	private void getNewMessage() {
+		WeChatHttpClinet httpClient = new WeChatHttpClinet();
+		HttpEntity entry = null;
+		String msgReqponse = null;
+		try {
+			String url = buildURL();
+			String paras = buildParas();
+			entry = httpClient.doPost(url, paras);
+			msgReqponse = EntityUtils.toString(entry);
+			updateSycnKey(msgReqponse);
+			procssMsgResponse(msgReqponse);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void updateSycnKey(String resp) {
+		JSONObject respJson = JSON.parseObject(resp);
+		JSONObject sycnObj = respJson.getJSONObject("SyncKey");
+		LoginController.sycnKeyMap = new HashMap<>();
+		LoginController.sycnKeyMap.put(0, sycnObj);
+		JSONArray sycnKeyArr = sycnObj.getJSONArray("List");
+		for (int i = 0; i < sycnKeyArr.size(); i++) {
+			LoginController.sycnKeyMap.put(sycnKeyArr.getJSONObject(i).getInteger("Key"),
+					sycnKeyArr.getJSONObject(i).getInteger("Val"));
+		}
+
+	}
+
+	private List<WeChatMessage> procssMsgResponse(String msgResp) {
+		JSONObject respJson = JSON.parseObject(msgResp);
+		JSONArray messages = respJson.getJSONArray("AddMsgList");
+		List<WeChatMessage> msgList = new ArrayList<>();
+		for (int i = 0; i < messages.size(); i++) {
+			JSONObject message = messages.getJSONObject(i);
+			WeChatMessage w = new WeChatMessage();
+			w.setContent(message.getString("Content"));
+			w.setFromUserName(message.getString("FromUserName"));
+			w.setMsgId(message.getString("MsgId"));
+			w.setMsgType(message.getInteger("MsgType"));
+			w.setNewMsgId(message.getString("NewMsgId"));
+			w.setToUserName(message.getString("ToUserName"));
+			msgList.add(w);
+		}
+		return msgList;
+
+	}
 
 	private void startListener() throws InterruptedException {
 
@@ -70,63 +105,106 @@ public class MessageListener extends Thread {
 		params.add(new BasicNameValuePair("uin", this.uid));
 		params.add(new BasicNameValuePair("sid", this.sid));
 		params.add(new BasicNameValuePair("skey", this.sKey));
-		params.add(new BasicNameValuePair("deviceid", this.passTicket));
+		params.add(new BasicNameValuePair("deviceid", generateDeviceID()));
 		params.add(new BasicNameValuePair("r", String.valueOf(System.currentTimeMillis())));
 		params.add(new BasicNameValuePair("synckey", buildSycnKey()));
 		params.add(new BasicNameValuePair("_", String.valueOf(System.currentTimeMillis())));
-		Thread.sleep(1000);
+		Thread.sleep(5000);
 		try {
 			WeChatHttpClinet httpClient = new WeChatHttpClinet();
-			HttpEntity entry = httpClient.doGet(URL.CHECK_SYCN_URL, params, true, null);
-			procssSycnResponse(WeChatHttpClinet.convertHttpEntry(entry));
+			HttpEntity entry = httpClient.doGet(URL.CHECK_SYCN_URL, params, false, null);
+			procssSycnResponse(EntityUtils.toString(entry));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
 
+	private void sycnCheckMsg() {
+		WeChatHttpClinet httpClient = new WeChatHttpClinet();
+		try {
+			HttpEntity entry = httpClient.doGet(URL.CHECK_SYCN_URL, buildCheckSycnParas(), false, null);
+			procssSycnResponse(EntityUtils.toString(entry));
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
+
 	private String buildCheckSycnURL() {
 		StringBuilder url = new StringBuilder(URL.CHECK_SYCN_URL);
-		String time = String.valueOf(System.currentTimeMillis());
-		url.append("?r=").append(time);
+		url.append("?r=").append(String.valueOf(System.currentTimeMillis()));
+		url.append("&skey=").append(this.sKey);
 		url.append("&sid=").append(this.sid);
 		url.append("&uin=").append(this.uid);
-		url.append("&skey=").append(this.sKey);
-		url.append("&deviceid=").append(this.sid);
+		url.append("&deviceid=").append(generateDeviceID());
 		url.append("&synckey=").append(buildSycnKey());
-		url.append("&_=").append(time);
-		System.out.println(url.toString());
+		url.append("&_=").append(String.valueOf(System.currentTimeMillis()));
 		return url.toString();
 	}
 
+	private List<BasicNameValuePair> buildCheckSycnParas() {
+		BasicNameValuePair r = new BasicNameValuePair("r", String.valueOf(System.currentTimeMillis()));
+		BasicNameValuePair sky = new BasicNameValuePair("skey", this.sKey);
+		BasicNameValuePair sid = new BasicNameValuePair("sid", this.sid);
+		BasicNameValuePair uin = new BasicNameValuePair("uin", this.uid);
+		BasicNameValuePair deviceid = new BasicNameValuePair("deviceid", generateDeviceID());
+		BasicNameValuePair synckey = new BasicNameValuePair("synckey", buildSycnKey());
+		BasicNameValuePair _ = new BasicNameValuePair("_", String.valueOf(System.currentTimeMillis()));
+		List<BasicNameValuePair> list = new ArrayList<>();
+		list.add(r);
+		list.add(sky);
+		list.add(sid);
+		list.add(uin);
+		list.add(deviceid);
+		list.add(synckey);
+		list.add(_);
+		return list;
+	}
+
 	private void procssSycnResponse(String strResp) {
+		// Response: window.synccheck={retcode:"0",selector:"2"}
+		String[] respArr = strResp.split("=");
+		JSONObject resJson = JSON.parseObject(respArr[1]);
+		if ("0".equals(resJson.getString("retcode"))) {
+			System.out.println("SycnCheck Success! " + strResp);
+			if ("2".equals(resJson.getString("selector"))) {
+				System.out.println("Has new Message! Will get new Message!");
+				getNewMessage();
+			}
+		}
+
 		System.out.println(strResp);
 	}
 
 	// ?sid=xxx&skey=xxx&pass_ticket=xxx
 	private String buildURL() {
-		StringBuilder sb = new StringBuilder(URL.SYCN_MSG_URL);
+		StringBuilder sb = new StringBuilder(LoginController.BASE_URL + "webwxsync");
 		sb.append("?sid=").append(this.sid);
 		sb.append("&skey=").append(this.sKey);
-		sb.append("&pass_ticket=").append(this.deviceid);
+		sb.append("&lang=en_");
+		sb.append("&pass_ticket=").append(this.passTicket);
 		return sb.toString();
 	}
 
 	private String buildParas() {
 		Map<String, Object> reqMap = new HashMap<>();
 		Map<String, String> loginInfoMap = new HashMap<>();
-		loginInfoMap.put("Uin", LoginController.loginInfo.get(LoginInfo.WSX_UIN));
+		loginInfoMap.put("Uin", this.uid);
 		loginInfoMap.put("Sid", this.sid);
 		loginInfoMap.put("Skey", this.sKey);
-		loginInfoMap.put("DeviceID", this.deviceid);
+		loginInfoMap.put("DeviceID", generateDeviceID());
 		reqMap.put("BaseRequest", loginInfoMap);
-		reqMap.put("SyncKey", buildSycnKey());
-		reqMap.put("rr", -new Date().getTime() / 1000);
+		reqMap.put("SyncKey", LoginController.sycnKeyMap.get(0));
+		reqMap.put("rr", String.valueOf(new Date().getTime() / 1000));
 		return JSON.toJSONString(reqMap);
 	}
 
 	private String buildSycnKey() {
 		StringBuilder sb = new StringBuilder();
-		for (Entry<Integer, String> e : sycnKeymap.entrySet()) {
+		for (Entry<Integer, Object> e : LoginController.sycnKeyMap.entrySet()) {
+			if (e.getKey() == 0) {
+				continue;
+			}
 			sb.append(e.getKey()).append("_").append(e.getValue()).append("|");
 		}
 		sb.deleteCharAt(sb.length() - 1);
@@ -140,6 +218,10 @@ public class MessageListener extends Thread {
 			sb.append(r.nextInt(9));
 		}
 		return sb.toString();
+	}
+
+	public static void main(String[] args) {
+		System.out.println(new Date().getTime() / 1000);
 	}
 
 }

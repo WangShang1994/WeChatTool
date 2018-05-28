@@ -1,11 +1,9 @@
 package com.cs.wechat.httpclient;
 
 import java.awt.Desktop;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
@@ -13,11 +11,13 @@ import java.util.Map.Entry;
 
 import org.apache.http.Consts;
 import org.apache.http.HttpEntity;
+import org.apache.http.client.CookieStore;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
@@ -25,9 +25,17 @@ import org.apache.http.util.EntityUtils;
 
 public class WeChatHttpClinet {
 
-	private static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36";
+	public static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36";
 
-	CloseableHttpClient httpClient = HttpClients.createDefault();
+	static CloseableHttpClient httpClient = HttpClients.createDefault();
+
+	private static CookieStore cookieStore;
+
+	static {
+		cookieStore = new BasicCookieStore();
+
+		httpClient = HttpClients.custom().setDefaultCookieStore(cookieStore).build();
+	}
 
 	public HttpEntity doGet(String url, List<BasicNameValuePair> params, boolean redirect,
 			Map<String, String> headerMap) {
@@ -61,25 +69,18 @@ public class WeChatHttpClinet {
 		if (url != null && !url.isEmpty()) {
 			post = new HttpPost(url);
 		}
-		post.setEntity(new StringEntity(paras, Consts.UTF_8));
+		StringEntity strEntity = new StringEntity(paras, Consts.UTF_8);
+		post.setEntity(strEntity);
 		post.setHeader("Content-type", "application/json; charset=utf-8");
-		// post.setHeader("User-Agent", USER_AGENT);
+		post.setHeader("User-Agent", USER_AGENT);
+		System.out.println("POSTURL:" + url);
+		System.out.println("POSTPARA:" + strEntity.toString());
 		try {
 			return httpClient.execute(post).getEntity();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return null;
-	}
-
-	public static String convertHttpEntry(HttpEntity e) throws Exception {
-		BufferedReader br = new BufferedReader(new InputStreamReader(e.getContent(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String tempLine;
-		while ((tempLine = br.readLine()) != null) {
-			sb.append(tempLine);
-		}
-		return sb.toString();
 	}
 
 	public static boolean storeHttpEnteyToFile(HttpEntity entry, String path) {

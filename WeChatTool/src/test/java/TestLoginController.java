@@ -17,9 +17,9 @@ public class TestLoginController {
 		lc.getLoginInfo(url);
 		lc.initAfterLogin();
 		lc.statusNotify();
+		WeChatGetContact a = new WeChatGetContact();
 		MessageListener listener = new MessageListener();
 		listener.start();
-		//WeChatGetContact a = new WeChatGetContact();
 	}
 
 }

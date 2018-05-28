@@ -1,6 +1,7 @@
 package com.cs.login;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -9,12 +10,14 @@ import java.util.TreeMap;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cs.constant.URL;
 import com.cs.contact.ContactUserInfo;
+import com.cs.wechat.httpclient.MyHttpClient;
 import com.cs.wechat.httpclient.WeChatHttpClinet;
 
 public class LoginController {
@@ -25,7 +28,9 @@ public class LoginController {
 
 	public static ContactUserInfo myselfInfo = new ContactUserInfo();
 
-	public static Map<Integer, String> sycnKeyMap = new TreeMap<>();
+	public static Map<Integer, Object> sycnKeyMap = new HashMap<>();
+
+	public static String BASE_URL = null;
 
 	public LoginController() {
 		try {
@@ -38,7 +43,7 @@ public class LoginController {
 	private String getUUID() throws Exception {
 		WeChatHttpClinet httpClient = new WeChatHttpClinet();
 		HttpEntity entry = httpClient.doGet(URL.GET_UUID_URL, null, false, null);
-		String resp = WeChatHttpClinet.convertHttpEntry(entry);
+		String resp = EntityUtils.toString(entry);
 		return getUUIDFromResponse(resp);
 	}
 
@@ -62,8 +67,10 @@ public class LoginController {
 		String url = null;
 		try {
 			entry = httpClient.doGet(buildGetTicketURL(), null, false, null);
-			String resp = WeChatHttpClinet.convertHttpEntry(entry);
-			url = resp.substring(resp.indexOf("window.code=200;window.redirect_uri=\"") + 37, resp.length() - 2);
+			String resp = EntityUtils.toString(entry).trim();
+			url = resp.substring(resp.indexOf("window.code=200;window.redirect_uri=\"") + 39, resp.length() - 2);
+			System.out.println(resp);
+			BASE_URL = url.substring(0, url.indexOf("webwxnewloginpage"));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -76,7 +83,8 @@ public class LoginController {
 		String resp = null;
 		try {
 			entry = httpClient.doGet(ticketUrl, null, false, null);
-			resp = WeChatHttpClinet.convertHttpEntry(entry);
+			resp = EntityUtils.toString(entry);
+			System.out.println(resp);
 			loginInfo.setSkey(resp.substring(resp.indexOf("<skey>") + 6, resp.indexOf("</skey>")));
 			loginInfo.setSid(resp.substring(resp.indexOf("<wxsid>") + 7, resp.indexOf("</wxsid>")));
 			loginInfo.setUin(resp.substring(resp.indexOf("<wxuin>") + 7, resp.indexOf("</wxuin>")));
@@ -94,7 +102,7 @@ public class LoginController {
 		String resp = null;
 		try {
 			entry = httpClient.doPost(buildInitURL(), JSON.toJSONString(buildLoginInfoParas()));
-			resp = WeChatHttpClinet.convertHttpEntry(entry);
+			resp = EntityUtils.toString(entry);
 			processInitResp(resp);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -102,7 +110,7 @@ public class LoginController {
 		return resp;
 	}
 
-	private void processInitResp(String resp) {
+	private void processInitResp(String resp) throws UnsupportedEncodingException {
 		JSONObject jsonResp = JSON.parseObject(resp);
 		JSONObject jsonMySelf = JSON.parseObject(jsonResp.getString("User"));
 		myselfInfo.setContactFlag(jsonMySelf.getIntValue("ContactFlag"));
@@ -116,8 +124,9 @@ public class LoginController {
 		myselfInfo.setSex(jsonMySelf.getIntValue("Sex"));
 		myselfInfo.setSignature(jsonMySelf.getString("Signature"));
 		myselfInfo.setUserName(jsonMySelf.getString("UserName"));
-		System.out.println("Welcome " + myselfInfo.getNickName());
+		System.out.println("Welcome " + new String(myselfInfo.getNickName().getBytes(), "UTF-8"));
 		JSONObject sycnKeyJson = JSON.parseObject(jsonResp.getString("SyncKey"));
+		sycnKeyMap.put(0, sycnKeyJson);
 		JSONArray sycnListJsonArr = sycnKeyJson.getJSONArray("List");
 		for (int i = 0; i < sycnListJsonArr.size(); i++) {
 			sycnKeyMap.put(sycnListJsonArr.getJSONObject(i).getInteger("Key"),
@@ -126,8 +135,8 @@ public class LoginController {
 	}
 
 	private String buildInitURL() {
-		StringBuilder url = new StringBuilder(URL.INIT_URL);
-		url.append("r=").append(String.valueOf(System.currentTimeMillis() / 3158L));
+		StringBuilder url = new StringBuilder(BASE_URL + "webwxinit");
+		url.append("?r=").append(String.valueOf(System.currentTimeMillis() / 3158L));
 		url.append("&pass_ticket=").append(loginInfo.get(LoginInfo.PASS_TICKET));
 		return url.toString();
 	}
@@ -151,9 +160,7 @@ public class LoginController {
 			String strParas = buildStatusNotifyParas();
 			String url = buildStatusNotifyURL();
 			entry = httpClient.doPost(url, strParas);
-			System.out.println("StatusNotifyParas:" + strParas);
-			System.out.println("StatusNotifyURL:" + url);
-			resp = WeChatHttpClinet.convertHttpEntry(entry);
+			resp = EntityUtils.toString(entry);
 			System.out.println("StatusNotifyResp:" + resp);
 		} catch (Exception e) {
 			e.printStackTrace();
