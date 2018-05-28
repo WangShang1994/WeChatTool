@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Random;
 
 import org.apache.http.HttpEntity;
-import org.apache.http.ParseException;
 import org.apache.http.util.EntityUtils;
 
 import com.alibaba.fastjson.JSON;

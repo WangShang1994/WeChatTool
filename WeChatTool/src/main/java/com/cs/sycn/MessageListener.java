@@ -18,7 +18,9 @@ import com.alibaba.fastjson.JSONObject;
 import com.cs.constant.URL;
 import com.cs.login.LoginController;
 import com.cs.login.LoginInfo;
+import com.cs.message.MessageSender;
 import com.cs.message.WeChatMessage;
+import com.cs.robot.ChatRobot;
 import com.cs.wechat.httpclient.MyHttpClient;
 import com.cs.wechat.httpclient.WeChatHttpClinet;
 
@@ -61,7 +63,12 @@ public class MessageListener extends Thread {
 			entry = httpClient.doPost(url, paras);
 			msgReqponse = EntityUtils.toString(entry);
 			updateSycnKey(msgReqponse);
-			procssMsgResponse(msgReqponse);
+			List<WeChatMessage> newMsgList = procssMsgResponse(msgReqponse);
+			for (WeChatMessage msg : newMsgList) {
+				MessageSender ms = new MessageSender(msg);
+				ChatRobot cr = new ChatRobot();
+				ms.send(cr.talk(msg.getContent()));
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
